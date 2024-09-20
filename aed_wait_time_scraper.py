@@ -30,13 +30,13 @@ def fetch_data():
 def update_dataset(new_data, dataset_path):
     print(f"Updating dataset: {dataset_path}")
     try:
-        dataset = load_dataset(dataset_path, split="train")
-        updated_data = dataset.add_item({"data": new_data})
+        dataset = load_dataset(dataset_path, split="main")
+        updated_data = dataset.add_item({"data": new_data, "timestamp": datetime.now().isoformat()})
     except Exception as e:
         print(f"Error loading dataset: {str(e)}. Creating new dataset.")
-        updated_data = Dataset.from_dict({"data": [new_data]})
+        updated_data = Dataset.from_dict({"data": [new_data], "timestamp": [datetime.now().isoformat()]})
 
-    updated_data.push_to_hub(dataset_path)
+    updated_data.push_to_hub(dataset_path, split="main")
     print("Dataset updated successfully")
 
 def update_readme(now):
@@ -57,43 +57,54 @@ def log_error(error_message):
         "timestamp": datetime.now().isoformat(),
         "error": error_message
     }
-    error_path = "StannumX/aed-wait-time-data/errors"
+    error_path = "StannumX/aed-wait-time-data"
     try:
-        dataset = load_dataset(error_path, split="train")
+        dataset = load_dataset(error_path, split="errors")
         updated_data = dataset.add_item(error_log)
     except Exception as e:
         print(f"Error loading error dataset: {str(e)}. Creating new error dataset.")
         updated_data = Dataset.from_dict({"errors": [error_log]})
     
-    updated_data.push_to_hub(error_path)
+    updated_data.push_to_hub(error_path, split="errors")
     print("Error logged successfully")
 
 def check_and_update():
     print("Checking and updating data...")
     now = datetime.now()
     fifteen_min_ago = now - timedelta(minutes=15)
-    year_month = fifteen_min_ago.strftime("%Y-%m")
-    day = fifteen_min_ago.strftime("%d")
     
-    data_path = f"StannumX/aed-wait-time-data/{year_month}/{day}"
+    data_path = "StannumX/aed-wait-time-data"
     
     try:
-        dataset = load_dataset(data_path, split="train")
-        last_entry = dataset[-1]['data']
-        last_entry_time = datetime.strptime(last_entry[0]['hospTimeEn'], "%d/%m/%Y %I:%M%p")
-        
-        if last_entry_time < fifteen_min_ago:
-            print("Data missing for the last 15 minutes. Fetching new data...")
+        dataset = load_dataset(data_path, split="main")
+        if len(dataset) > 0:
+            last_entry = dataset[-1]
+            last_entry_time = datetime.fromisoformat(last_entry['timestamp'])
+            
+            if last_entry_time < fifteen_min_ago:
+                print("Data missing for the last 15 minutes. Fetching new data...")
+                data = fetch_data()
+                update_dataset(data, data_path)
+                update_readme(now)
+                print("Data updated successfully.")
+            else:
+                print("Data is up to date. No action needed.")
+        else:
+            print("Dataset is empty. Fetching new data...")
             data = fetch_data()
             update_dataset(data, data_path)
             update_readme(now)
             print("Data updated successfully.")
-        else:
-            print("Data is up to date. No action needed.")
     except Exception as e:
         error_message = f"Error checking or updating data: {str(e)}"
         print(error_message)
         log_error(error_message)
+        # If the dataset doesn't exist, create it
+        if "Couldn't find any data file" in str(e):
+            data = fetch_data()
+            update_dataset(data, data_path)
+            update_readme(now)
+            print("New dataset created and data updated successfully.")
 
 def main():
     print("Main function started")
@@ -104,9 +115,7 @@ def main():
         try:
             data = fetch_data()
             now = datetime.now()
-            year_month = now.strftime("%Y-%m")
-            day = now.strftime("%d")
-            data_path = f"StannumX/aed-wait-time-data/{year_month}/{day}"
+            data_path = "StannumX/aed-wait-time-data"
             update_dataset(data, data_path)
             update_readme(now)
             print(f"Data updated successfully at {now.isoformat()}")
