@@ -3,6 +3,7 @@ name: Update AED Wait Time Data
 on:
   schedule:
     - cron: '*/15 * * * *'  # Run every 15 minutes
+  workflow_dispatch:  # 添加这一行
 
 jobs:
   update_data:
