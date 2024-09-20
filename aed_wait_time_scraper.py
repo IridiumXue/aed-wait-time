@@ -3,10 +3,17 @@ import json
 from datetime import datetime, timedelta
 import os
 from huggingface_hub import HfApi, create_repo
+import pytz
 
 print("Script started")
 print(f"HF_TOKEN is set: {'HF_TOKEN' in os.environ}")
 print(f"SCRAPE_MODE: {os.environ.get('SCRAPE_MODE', 'Not set')}")
+
+# 设置香港时区
+hk_tz = pytz.timezone('Asia/Hong_Kong')
+
+def get_hk_time():
+    return datetime.now(hk_tz)
 
 def fetch_data():
     print("Fetching data...")
@@ -38,8 +45,8 @@ def update_dataset(new_data, repo_id, timestamp=None):
     except Exception as e:
         print(f"Error creating repo: {str(e)}")
     
-    # Get current date for file naming
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    # Get current date for file naming (in HK time)
+    current_date = get_hk_time().strftime("%Y-%m-%d")
     filename = f"data_{current_date}.json"
     
     # Check if the file for today already exists
@@ -53,7 +60,7 @@ def update_dataset(new_data, repo_id, timestamp=None):
     
     # Append new data to existing data
     existing_data["data"].append({
-        "timestamp": timestamp.isoformat() if timestamp else datetime.now().isoformat(),
+        "timestamp": timestamp.isoformat() if timestamp else get_hk_time().isoformat(),
         "hospitals": new_data
     })
     
@@ -72,16 +79,18 @@ def update_dataset(new_data, repo_id, timestamp=None):
 def update_readme(repo_id):
     print("Updating README...")
     api = HfApi()
-    now = datetime.now()
+    now = get_hk_time()
     readme_content = f"""# AED Wait Time Data
 
-Last updated: {now.isoformat()}
+Last updated: {now.isoformat()} (Hong Kong Time)
 
 This dataset contains AED wait time data for Hong Kong public hospitals. Data is organized in daily files and includes both English and Chinese hospital names.
 
 Note: The data is collected every 15 minutes. If the script runs between these 15-minute intervals, it will retrieve data for the most recent 15-minute period.
 
 Note: Chinese hospital names are stored under the 'hospNameCh' key in our dataset, but they are originally from the 'hospNameGb' field in the source API.
+
+Note: All timestamps in this dataset are in Hong Kong Time (HKT, UTC+8).
 
 Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese characters. If you see Unicode escape sequences (e.g., \\u4ec1\\u6d4e\\u533b\\u9662) instead of Chinese characters when viewing the raw JSON on the Hugging Face website, this is normal and does not affect the data integrity. You can download the JSON file and open it in a UTF-8 compatible editor to view the Chinese characters directly.
 """
@@ -96,9 +105,9 @@ Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese chara
 def log_error(error_message, repo_id):
     print(f"Logging error: {error_message}")
     api = HfApi()
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    current_date = get_hk_time().strftime("%Y-%m-%d")
     error_log = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": get_hk_time().isoformat(),
         "error": error_message
     }
     error_filename = f"error_{current_date}.json"
@@ -125,7 +134,7 @@ def log_error(error_message, repo_id):
 def check_and_update(repo_id):
     print("Checking and updating data...")
     api = HfApi()
-    now = datetime.now()
+    now = get_hk_time()
     current_date = now.strftime("%Y-%m-%d")
     
     try:
@@ -136,7 +145,7 @@ def check_and_update(repo_id):
             daily_data = json.load(f)
         
         if daily_data["data"]:
-            last_entry_time = datetime.fromisoformat(daily_data["data"][-1]["timestamp"])
+            last_entry_time = datetime.fromisoformat(daily_data["data"][-1]["timestamp"]).replace(tzinfo=hk_tz)
             
             # Calculate the start of the current 15-minute interval
             current_interval_start = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
@@ -172,7 +181,7 @@ def main():
     if scrape_mode == 'NORMAL':
         try:
             data = fetch_data()
-            now = datetime.now()
+            now = get_hk_time()
             current_interval_start = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
             update_dataset(data, repo_id, timestamp=current_interval_start)
             update_readme(repo_id)
