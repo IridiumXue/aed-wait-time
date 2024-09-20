@@ -2,24 +2,24 @@ name: Update AED Wait Time Data
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '* * * * *'
   workflow_dispatch:
 
 jobs:
   update_data:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4  # 更新到 v4
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v5  # 更新到 v5
+      uses: actions/setup-python@v5
       with:
         python-version: '3.x'
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pytz
     - name: Run script
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        SCRAPE_MODE: ${{ github.event.schedule == '*/15 * * * *' && 'NORMAL' || 'CHECK' }}
       run: python aed_wait_time_scraper.py
