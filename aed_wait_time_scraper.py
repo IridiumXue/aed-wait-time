@@ -19,16 +19,16 @@ def get_next_check_time(current_time):
     hour = current_time.hour
     minute = current_time.minute
     
-    if minute < 1:
-        next_minute = 1
-    elif minute < 16:
-        next_minute = 16
-    elif minute < 31:
-        next_minute = 31
-    elif minute < 46:
-        next_minute = 46
+    if minute < 2:
+        next_minute = 2
+    elif minute < 17:
+        next_minute = 17
+    elif minute < 32:
+        next_minute = 32
+    elif minute < 47:
+        next_minute = 47
     else:
-        next_minute = 1
+        next_minute = 2
         hour = (hour + 1) % 24
     
     next_time = current_time.replace(hour=hour, minute=next_minute, second=0, microsecond=0)
