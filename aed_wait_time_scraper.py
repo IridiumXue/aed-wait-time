@@ -9,8 +9,16 @@ import logging
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# 获取 Hugging Face 令牌
+hf_token = os.environ.get('HF_TOKEN')
+if not hf_token:
+    raise ValueError("HF_TOKEN environment variable is not set")
+
+# 创建 HfApi 实例
+api = HfApi(token=hf_token)
+
 print("Script started")
-print(f"HF_TOKEN is set: {'HF_TOKEN' in os.environ}")
+print(f"HF_TOKEN is set: {bool(hf_token)}")
 
 # 设置香港时区
 hk_tz = pytz.timezone('Asia/Hong_Kong')
@@ -73,11 +81,10 @@ def fetch_data():
 
 def update_dataset(new_data, repo_id, timestamp=None):
     logging.info(f"Updating dataset: {repo_id}")
-    api = HfApi()
     
     # Ensure the repo exists
     try:
-        create_repo(repo_id, repo_type="dataset", exist_ok=True)
+        create_repo(repo_id, repo_type="dataset", exist_ok=True, token=hf_token)
     except Exception as e:
         logging.error(f"Error creating repo: {str(e)}")
         raise
@@ -88,7 +95,7 @@ def update_dataset(new_data, repo_id, timestamp=None):
     
     # Check if the file for today already exists
     try:
-        existing_content = api.hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
+        existing_content = api.hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset", token=hf_token)
         with open(existing_content, 'r', encoding='utf-8') as f:
             existing_data = json.load(f)
     except Exception as e:
@@ -110,7 +117,8 @@ def update_dataset(new_data, repo_id, timestamp=None):
             path_or_fileobj=json_data.encode('utf-8'),
             path_in_repo=filename,
             repo_id=repo_id,
-            repo_type="dataset"
+            repo_type="dataset",
+            token=hf_token
         )
         logging.info(f"Data file {filename} updated successfully")
     except Exception as e:
@@ -119,7 +127,6 @@ def update_dataset(new_data, repo_id, timestamp=None):
 
 def update_readme(repo_id):
     logging.info("Updating README...")
-    api = HfApi()
     now = get_hk_time()
     readme_content = f"""# AED Wait Time Data
 
@@ -141,6 +148,7 @@ Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese chara
             path_in_repo="README.md",
             repo_id=repo_id,
             repo_type="dataset",
+            token=hf_token
         )
         logging.info("README updated successfully")
     except Exception as e:
@@ -149,14 +157,13 @@ Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese chara
 
 def check_and_update(repo_id):
     logging.info("Checking and updating data...")
-    api = HfApi()
     now = get_hk_time()
     current_date = now.strftime("%Y-%m-%d")
     
     try:
         # Try to download today's file
         filename = f"data_{current_date}.json"
-        file_content = api.hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
+        file_content = api.hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset", token=hf_token)
         with open(file_content, 'r', encoding='utf-8') as f:
             daily_data = json.load(f)
         
