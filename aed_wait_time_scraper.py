@@ -2,12 +2,11 @@ import requests
 import json
 from datetime import datetime, timedelta
 import os
-from huggingface_hub import HfApi, create_repo
 import pytz
+from huggingface_hub import HfApi, create_repo
 
 print("Script started")
 print(f"HF_TOKEN is set: {'HF_TOKEN' in os.environ}")
-print(f"SCRAPE_MODE: {os.environ.get('SCRAPE_MODE', 'Not set')}")
 
 # 设置香港时区
 hk_tz = pytz.timezone('Asia/Hong_Kong')
@@ -45,7 +44,7 @@ def update_dataset(new_data, repo_id, timestamp=None):
     except Exception as e:
         print(f"Error creating repo: {str(e)}")
     
-    # Get current date for file naming (in HK time)
+    # Get current date for file naming
     current_date = get_hk_time().strftime("%Y-%m-%d")
     filename = f"data_{current_date}.json"
     
@@ -86,7 +85,7 @@ Last updated: {now.isoformat()} (Hong Kong Time)
 
 This dataset contains AED wait time data for Hong Kong public hospitals. Data is organized in daily files and includes both English and Chinese hospital names.
 
-Note: The data is collected every 15 minutes. If the script runs between these 15-minute intervals, it will retrieve data for the most recent 15-minute period.
+Note: The data is collected every 15 minutes (at 00, 15, 30, 45 minutes past each hour).
 
 Note: Chinese hospital names are stored under the 'hospNameCh' key in our dataset, but they are originally from the 'hospNameGb' field in the source API.
 
@@ -131,6 +130,11 @@ def log_error(error_message, repo_id):
     )
     print("Error logged successfully")
 
+def should_update(last_update_time):
+    now = get_hk_time()
+    minutes_since_last_update = (now - last_update_time).total_seconds() / 60
+    return minutes_since_last_update >= 15 and now.minute % 15 == 0
+
 def check_and_update(repo_id):
     print("Checking and updating data...")
     api = HfApi()
@@ -147,17 +151,14 @@ def check_and_update(repo_id):
         if daily_data["data"]:
             last_entry_time = datetime.fromisoformat(daily_data["data"][-1]["timestamp"]).replace(tzinfo=hk_tz)
             
-            # Calculate the start of the current 15-minute interval
-            current_interval_start = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
-            
-            if last_entry_time < current_interval_start:
-                print(f"Data missing for the interval starting at {current_interval_start}. Fetching new data...")
+            if should_update(last_entry_time):
+                print(f"Updating data for {now.strftime('%Y-%m-%d %H:%M')}...")
                 data = fetch_data()
-                update_dataset(data, repo_id, timestamp=current_interval_start)
+                update_dataset(data, repo_id, timestamp=now)
                 update_readme(repo_id)
                 print("Data updated successfully.")
             else:
-                print("Data is up to date. No action needed.")
+                print("Not yet time for the next update.")
         else:
             print("Today's file is empty. Fetching new data...")
             data = fetch_data()
@@ -175,25 +176,7 @@ def check_and_update(repo_id):
 def main():
     print("Main function started")
     repo_id = "StannumX/aed-wait-time-data"
-    scrape_mode = os.environ.get('SCRAPE_MODE', 'NORMAL')
-    print(f"Scrape mode: {scrape_mode}")
-    
-    if scrape_mode == 'NORMAL':
-        try:
-            data = fetch_data()
-            now = get_hk_time()
-            current_interval_start = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
-            update_dataset(data, repo_id, timestamp=current_interval_start)
-            update_readme(repo_id)
-            print(f"Data updated successfully at {now.isoformat()}")
-        except Exception as e:
-            error_message = f"Failed to fetch and update data: {str(e)}"
-            print(error_message)
-            log_error(error_message, repo_id)
-    elif scrape_mode == 'CHECK':
-        check_and_update(repo_id)
-    else:
-        print(f"Unknown scrape mode: {scrape_mode}")
+    check_and_update(repo_id)
 
 if __name__ == "__main__":
     main()
