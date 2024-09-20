@@ -14,28 +14,34 @@ hk_tz = pytz.timezone('Asia/Hong_Kong')
 def get_hk_time():
     return datetime.now(hk_tz)
 
-def get_next_check_time(current_time):
-    """计算下一个检查时间点"""
-    hour = current_time.hour
-    minute = current_time.minute
+def get_check_times(reference_time):
+    """获取参考时间所在小时的所有检查时间点"""
+    check_minutes = [2, 17, 32, 47]
+    check_times = []
+    for minute in check_minutes:
+        check_time = reference_time.replace(minute=minute, second=0, microsecond=0)
+        if check_time <= reference_time:
+            check_time += timedelta(hours=1)
+        check_times.append(check_time)
+    return check_times
+
+def should_update(last_update_time):
+    now = get_hk_time()
+    check_times = get_check_times(now)
     
-    if minute < 2:
-        next_minute = 2
-    elif minute < 17:
-        next_minute = 17
-    elif minute < 32:
-        next_minute = 32
-    elif minute < 47:
-        next_minute = 47
-    else:
-        next_minute = 2
-        hour = (hour + 1) % 24
+    # 找到下一个检查时间点
+    next_check_time = min(t for t in check_times if t > now)
     
-    next_time = current_time.replace(hour=hour, minute=next_minute, second=0, microsecond=0)
-    if next_time <= current_time:
-        next_time += timedelta(hours=1)
+    # 找到上一个检查时间点
+    prev_check_time = max(t for t in check_times if t <= now)
     
-    return next_time
+    print(f"Now: {now.isoformat()}")
+    print(f"Last update: {last_update_time.isoformat()}")
+    print(f"Previous check time: {prev_check_time.isoformat()}")
+    print(f"Next check time: {next_check_time.isoformat()}")
+    
+    # 如果最后更新时间早于上一个检查时间点，则应该更新
+    return last_update_time < prev_check_time
 
 def fetch_data():
     print("Fetching data...")
@@ -124,11 +130,6 @@ Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese chara
     )
     print("README updated successfully")
 
-def should_update(last_update_time):
-    now = get_hk_time()
-    next_check_time = get_next_check_time(last_update_time)
-    return now >= next_check_time
-
 def check_and_update(repo_id):
     print("Checking and updating data...")
     api = HfApi()
@@ -153,7 +154,8 @@ def check_and_update(repo_id):
                 update_readme(repo_id)
                 print("Data updated successfully.")
             else:
-                next_check = get_next_check_time(now)
+                check_times = get_check_times(now)
+                next_check = min(t for t in check_times if t > now)
                 print(f"Not yet time for the next update. Next check at: {next_check.strftime('%Y-%m-%d %H:%M')}")
         else:
             print("Today's file is empty. Fetching new data...")
