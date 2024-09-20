@@ -2,7 +2,7 @@ name: Update AED Wait Time Data
 
 on:
   schedule:
-    - cron: '*/2 * * * *'
+    - cron: '*/1 * * * *'
   workflow_dispatch:
 
 jobs:
