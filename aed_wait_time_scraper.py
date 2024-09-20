@@ -14,6 +14,29 @@ hk_tz = pytz.timezone('Asia/Hong_Kong')
 def get_hk_time():
     return datetime.now(hk_tz)
 
+def get_next_check_time(current_time):
+    """计算下一个检查时间点"""
+    hour = current_time.hour
+    minute = current_time.minute
+    
+    if minute < 1:
+        next_minute = 1
+    elif minute < 16:
+        next_minute = 16
+    elif minute < 31:
+        next_minute = 31
+    elif minute < 46:
+        next_minute = 46
+    else:
+        next_minute = 1
+        hour = (hour + 1) % 24
+    
+    next_time = current_time.replace(hour=hour, minute=next_minute, second=0, microsecond=0)
+    if next_time <= current_time:
+        next_time += timedelta(hours=1)
+    
+    return next_time
+
 def fetch_data():
     print("Fetching data...")
     url = "https://www.ha.org.hk/aedwt/data/aedWtData.json"
@@ -85,7 +108,7 @@ Last updated: {now.isoformat()} (Hong Kong Time)
 
 This dataset contains AED wait time data for Hong Kong public hospitals. Data is organized in daily files and includes both English and Chinese hospital names.
 
-Note: The data is collected every 15 minutes (at 00, 15, 30, 45 minutes past each hour).
+Note: The data is collected at fixed time points: 01, 16, 31, and 46 minutes past each hour.
 
 Note: Chinese hospital names are stored under the 'hospNameCh' key in our dataset, but they are originally from the 'hospNameGb' field in the source API.
 
@@ -101,39 +124,10 @@ Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese chara
     )
     print("README updated successfully")
 
-def log_error(error_message, repo_id):
-    print(f"Logging error: {error_message}")
-    api = HfApi()
-    current_date = get_hk_time().strftime("%Y-%m-%d")
-    error_log = {
-        "timestamp": get_hk_time().isoformat(),
-        "error": error_message
-    }
-    error_filename = f"error_{current_date}.json"
-    
-    # Check if error file for today exists
-    try:
-        existing_content = api.hf_hub_download(repo_id=repo_id, filename=f"errors/{error_filename}", repo_type="dataset")
-        with open(existing_content, 'r', encoding='utf-8') as f:
-            existing_errors = json.load(f)
-    except:
-        existing_errors = {"errors": []}
-    
-    existing_errors["errors"].append(error_log)
-    json_error = json.dumps(existing_errors, ensure_ascii=False, indent=2)
-    
-    api.upload_file(
-        path_or_fileobj=json_error.encode('utf-8'),
-        path_in_repo=f"errors/{error_filename}",
-        repo_id=repo_id,
-        repo_type="dataset"
-    )
-    print("Error logged successfully")
-
 def should_update(last_update_time):
     now = get_hk_time()
-    minutes_since_last_update = (now - last_update_time).total_seconds() / 60
-    return minutes_since_last_update >= 15 and now.minute % 15 == 0
+    next_check_time = get_next_check_time(last_update_time)
+    return now >= next_check_time
 
 def check_and_update(repo_id):
     print("Checking and updating data...")
@@ -150,6 +144,7 @@ def check_and_update(repo_id):
         
         if daily_data["data"]:
             last_entry_time = datetime.fromisoformat(daily_data["data"][-1]["timestamp"]).replace(tzinfo=hk_tz)
+            print(f"Last update time: {last_entry_time.isoformat()}")
             
             if should_update(last_entry_time):
                 print(f"Updating data for {now.strftime('%Y-%m-%d %H:%M')}...")
@@ -158,26 +153,29 @@ def check_and_update(repo_id):
                 update_readme(repo_id)
                 print("Data updated successfully.")
             else:
-                print("Not yet time for the next update.")
+                next_check = get_next_check_time(now)
+                print(f"Not yet time for the next update. Next check at: {next_check.strftime('%Y-%m-%d %H:%M')}")
         else:
             print("Today's file is empty. Fetching new data...")
             data = fetch_data()
-            update_dataset(data, repo_id)
+            update_dataset(data, repo_id, timestamp=now)
             update_readme(repo_id)
             print("Data updated successfully.")
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         print("Fetching new data and creating/updating file...")
         data = fetch_data()
-        update_dataset(data, repo_id)
+        update_dataset(data, repo_id, timestamp=now)
         update_readme(repo_id)
         print("Data updated successfully.")
 
 def main():
     print("Main function started")
     repo_id = "StannumX/aed-wait-time-data"
+    now = get_hk_time()
+    print(f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
     check_and_update(repo_id)
+    print("Script completed")
 
 if __name__ == "__main__":
     main()
-    print("Script completed")
