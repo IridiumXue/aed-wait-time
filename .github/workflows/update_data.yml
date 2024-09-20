@@ -2,23 +2,30 @@ name: Update AED Wait Time Data
 
 on:
   schedule:
-    - cron: '*/1 * * * *'
-  workflow_dispatch:
+    - cron: '*/3 * * * *'  # 每3分钟运行一次
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   update_data:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v3
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.x'
+        python-version: '3.9'
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests pytz huggingface_hub
+        pip install -r requirements.txt
     - name: Run script
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: python aed_wait_time_scraper.py
+    - name: Upload logs
+      uses: actions/upload-artifact@v3
+      if: always()  # 即使脚本失败也上传日志
+      with:
+        name: script-logs
+        path: script.log
+        retention-days: 7
