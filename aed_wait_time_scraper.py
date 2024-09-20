@@ -93,7 +93,75 @@ Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese chara
     )
     print("README updated successfully")
 
-# ... [其他函数保持不变] ...
+def log_error(error_message, repo_id):
+    print(f"Logging error: {error_message}")
+    api = HfApi()
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    error_log = {
+        "timestamp": datetime.now().isoformat(),
+        "error": error_message
+    }
+    error_filename = f"error_{current_date}.json"
+    
+    # Check if error file for today exists
+    try:
+        existing_content = api.hf_hub_download(repo_id=repo_id, filename=f"errors/{error_filename}", repo_type="dataset")
+        with open(existing_content, 'r', encoding='utf-8') as f:
+            existing_errors = json.load(f)
+    except:
+        existing_errors = {"errors": []}
+    
+    existing_errors["errors"].append(error_log)
+    json_error = json.dumps(existing_errors, ensure_ascii=False, indent=2)
+    
+    api.upload_file(
+        path_or_fileobj=json_error.encode('utf-8'),
+        path_in_repo=f"errors/{error_filename}",
+        repo_id=repo_id,
+        repo_type="dataset"
+    )
+    print("Error logged successfully")
+
+def check_and_update(repo_id):
+    print("Checking and updating data...")
+    api = HfApi()
+    now = datetime.now()
+    current_date = now.strftime("%Y-%m-%d")
+    
+    try:
+        # Try to download today's file
+        filename = f"data_{current_date}.json"
+        file_content = api.hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
+        with open(file_content, 'r', encoding='utf-8') as f:
+            daily_data = json.load(f)
+        
+        if daily_data["data"]:
+            last_entry_time = datetime.fromisoformat(daily_data["data"][-1]["timestamp"])
+            
+            # Calculate the start of the current 15-minute interval
+            current_interval_start = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
+            
+            if last_entry_time < current_interval_start:
+                print(f"Data missing for the interval starting at {current_interval_start}. Fetching new data...")
+                data = fetch_data()
+                update_dataset(data, repo_id, timestamp=current_interval_start)
+                update_readme(repo_id)
+                print("Data updated successfully.")
+            else:
+                print("Data is up to date. No action needed.")
+        else:
+            print("Today's file is empty. Fetching new data...")
+            data = fetch_data()
+            update_dataset(data, repo_id)
+            update_readme(repo_id)
+            print("Data updated successfully.")
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        print("Fetching new data and creating/updating file...")
+        data = fetch_data()
+        update_dataset(data, repo_id)
+        update_readme(repo_id)
+        print("Data updated successfully.")
 
 def main():
     print("Main function started")
