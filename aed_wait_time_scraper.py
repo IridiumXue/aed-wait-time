@@ -17,7 +17,8 @@ def fetch_data():
         extracted_data = []
         for hospital in data['result']['hospData']:
             extracted_data.append({
-                "hospNameGb": hospital['hospNameGb'],
+                "hospNameEn": hospital['hospNameEn'],
+                "hospNameCh": hospital['hospNameCh'],
                 "topWait": hospital['topWait'],
                 "hospTimeEn": hospital['hospTimeEn']
             })
@@ -26,7 +27,7 @@ def fetch_data():
     else:
         raise Exception(f"Failed to fetch data: {response.status_code}")
 
-def update_dataset(new_data, repo_id):
+def update_dataset(new_data, repo_id, timestamp=None):
     print(f"Updating dataset: {repo_id}")
     api = HfApi()
     
@@ -43,23 +44,23 @@ def update_dataset(new_data, repo_id):
     # Check if the file for today already exists
     try:
         existing_content = api.hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
-        with open(existing_content, 'r') as f:
+        with open(existing_content, 'r', encoding='utf-8') as f:
             existing_data = json.load(f)
     except:
         existing_data = {"data": []}
     
     # Append new data to existing data
     existing_data["data"].append({
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": timestamp.isoformat() if timestamp else datetime.now().isoformat(),
         "hospitals": new_data
     })
     
-    # Convert data to JSON string
-    json_data = json.dumps(existing_data, indent=2)
+    # Convert data to JSON string, ensure_ascii=False to properly encode Chinese characters
+    json_data = json.dumps(existing_data, ensure_ascii=False, indent=2)
     
     # Upload the file
     api.upload_file(
-        path_or_fileobj=json_data.encode(),
+        path_or_fileobj=json_data.encode('utf-8'),
         path_in_repo=filename,
         repo_id=repo_id,
         repo_type="dataset"
@@ -70,9 +71,18 @@ def update_readme(repo_id):
     print("Updating README...")
     api = HfApi()
     now = datetime.now()
-    readme_content = f"# AED Wait Time Data\n\nLast updated: {now.isoformat()}\n\nThis dataset contains AED wait time data for Hong Kong public hospitals. Data is organized in daily files."
+    readme_content = f"""# AED Wait Time Data
+
+Last updated: {now.isoformat()}
+
+This dataset contains AED wait time data for Hong Kong public hospitals. Data is organized in daily files and includes both English and Chinese hospital names.
+
+Note: The data is collected every 15 minutes. If the script runs between these 15-minute intervals, it will retrieve data for the most recent 15-minute period.
+
+Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese characters. If you see Unicode escape sequences (e.g., \\u5e7f\\u534e\\u533b\\u9662) instead of Chinese characters when viewing the raw JSON on the Hugging Face website, this is normal and does not affect the data integrity. You can download the JSON file and open it in a UTF-8 compatible editor to view the Chinese characters directly.
+"""
     api.upload_file(
-        path_or_fileobj=readme_content.encode(),
+        path_or_fileobj=readme_content.encode('utf-8'),
         path_in_repo="README.md",
         repo_id=repo_id,
         repo_type="dataset",
@@ -92,16 +102,16 @@ def log_error(error_message, repo_id):
     # Check if error file for today exists
     try:
         existing_content = api.hf_hub_download(repo_id=repo_id, filename=f"errors/{error_filename}", repo_type="dataset")
-        with open(existing_content, 'r') as f:
+        with open(existing_content, 'r', encoding='utf-8') as f:
             existing_errors = json.load(f)
     except:
         existing_errors = {"errors": []}
     
     existing_errors["errors"].append(error_log)
-    json_error = json.dumps(existing_errors, indent=2)
+    json_error = json.dumps(existing_errors, ensure_ascii=False, indent=2)
     
     api.upload_file(
-        path_or_fileobj=json_error.encode(),
+        path_or_fileobj=json_error.encode('utf-8'),
         path_in_repo=f"errors/{error_filename}",
         repo_id=repo_id,
         repo_type="dataset"
@@ -112,23 +122,25 @@ def check_and_update(repo_id):
     print("Checking and updating data...")
     api = HfApi()
     now = datetime.now()
-    fifteen_min_ago = now - timedelta(minutes=15)
     current_date = now.strftime("%Y-%m-%d")
     
     try:
         # Try to download today's file
         filename = f"data_{current_date}.json"
         file_content = api.hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
-        with open(file_content, 'r') as f:
+        with open(file_content, 'r', encoding='utf-8') as f:
             daily_data = json.load(f)
         
         if daily_data["data"]:
             last_entry_time = datetime.fromisoformat(daily_data["data"][-1]["timestamp"])
             
-            if last_entry_time < fifteen_min_ago:
-                print("Data missing for the last 15 minutes. Fetching new data...")
+            # Calculate the start of the current 15-minute interval
+            current_interval_start = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
+            
+            if last_entry_time < current_interval_start:
+                print(f"Data missing for the interval starting at {current_interval_start}. Fetching new data...")
                 data = fetch_data()
-                update_dataset(data, repo_id)
+                update_dataset(data, repo_id, timestamp=current_interval_start)
                 update_readme(repo_id)
                 print("Data updated successfully.")
             else:
@@ -160,9 +172,11 @@ def main():
     if scrape_mode == 'NORMAL':
         try:
             data = fetch_data()
-            update_dataset(data, repo_id)
+            now = datetime.now()
+            current_interval_start = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
+            update_dataset(data, repo_id, timestamp=current_interval_start)
             update_readme(repo_id)
-            print(f"Data updated successfully at {datetime.now().isoformat()}")
+            print(f"Data updated successfully at {now.isoformat()}")
         except Exception as e:
             error_message = f"Failed to fetch and update data: {str(e)}"
             print(error_message)
