@@ -8,7 +8,7 @@ from huggingface_hub import HfApi, create_repo
 print("Script started")
 print(f"HF_TOKEN is set: {'HF_TOKEN' in os.environ}")
 
-# 设置香港时区
+# 设置时区
 hk_tz = pytz.timezone('Asia/Hong_Kong')
 
 def get_hk_time():
