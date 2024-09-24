@@ -112,16 +112,9 @@ def update_readme(repo_id):
 
 Last updated: {now.isoformat()} (Hong Kong Time)
 
-This dataset contains AED wait time data for Hong Kong public hospitals. Data is organized in daily files and includes both English and Chinese hospital names.
-
-Note: The data is collected at fixed time points: 01, 16, 31, and 46 minutes past each hour.
-
-Note: Chinese hospital names are stored under the 'hospNameCh' key in our dataset, but they are originally from the 'hospNameGb' field in the source API.
-
 Note: All timestamps in this dataset are in Hong Kong Time (HKT, UTC+8).
 
-Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese characters. If you see Unicode escape sequences (e.g., \\u4ec1\\u6d4e\\u533b\\u9662) instead of Chinese characters when viewing the raw JSON on the Hugging Face website, this is normal and does not affect the data integrity. You can download the JSON file and open it in a UTF-8 compatible editor to view the Chinese characters directly.
-"""
+Note: All JSON files in this dataset are UTF-8 encoded and contain Chinese characters. 
     api.upload_file(
         path_or_fileobj=readme_content.encode('utf-8'),
         path_in_repo="README.md",
